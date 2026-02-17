@@ -1,0 +1,352 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model announcements {
+  id         BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  message    String   @db.Text
+  created_by BigInt   @db.UnsignedBigInt
+  timestamp  DateTime @default(now()) @db.Timestamp(0)
+  bus_id     Int?     @db.UnsignedInt
+  users      users    @relation(fields: [created_by], references: [id], onDelete: Cascade, map: "fk_announcements_user")
+
+  @@index([bus_id], map: "idx_bus_id")
+  @@index([created_by], map: "idx_created_by")
+}
+
+model buses {
+  id                 Int                  @id @default(autoincrement()) @db.UnsignedInt
+  identifier         String               @unique(map: "identifier") @db.VarChar(64)
+  capacity           Int?
+  description        String?              @db.VarChar(128)
+  created_at         DateTime             @default(now()) @db.DateTime(0)
+  driver_assignments driver_assignments[]
+  pao_assignments    pao_assignments[]
+  sensor_readings    sensor_readings[]
+  ticket_stops       ticket_stops[]
+  trips              trips[]
+  wallet_ledger      wallet_ledger[]
+}
+
+model device_tokens {
+  id         Int      @id @default(autoincrement()) @db.UnsignedInt
+  user_id    BigInt   @db.UnsignedBigInt
+  token      String   @unique(map: "uq_device_token")
+  platform   String?  @db.VarChar(32)
+  created_at DateTime @default(now()) @db.DateTime(0)
+  updated_at DateTime @default(now()) @db.DateTime(0)
+  users      users    @relation(fields: [user_id], references: [id], onDelete: Cascade, map: "fk_device_tokens_user")
+
+  @@index([user_id], map: "idx_device_tokens_user")
+}
+
+model driver_assignments {
+  id           Int      @id @default(autoincrement()) @db.UnsignedInt
+  user_id      BigInt   @db.UnsignedBigInt
+  bus_id       Int      @db.UnsignedInt
+  service_date DateTime @db.Date
+  created_at   DateTime @default(now()) @db.Timestamp(0)
+  buses        buses    @relation(fields: [bus_id], references: [id], onDelete: Cascade, map: "fk_drv_bus")
+  users        users    @relation(fields: [user_id], references: [id], onDelete: Cascade, map: "fk_drv_user")
+
+  @@unique([service_date, bus_id], map: "uniq_drv_bus_day")
+  @@unique([service_date, user_id], map: "uniq_drv_user_day")
+  @@index([bus_id], map: "fk_drv_bus")
+  @@index([user_id], map: "fk_drv_user")
+  @@index([service_date], map: "idx_drv_date")
+}
+
+model nfc_cards {
+  id         Int              @id @default(autoincrement()) @db.UnsignedInt
+  uid        String           @unique(map: "uq_nfc_uid") @db.VarChar(32)
+  user_id    BigInt           @db.UnsignedBigInt
+  label      String?          @db.VarChar(64)
+  status     nfc_cards_status @default(active)
+  created_at DateTime         @default(now()) @db.DateTime(0)
+  updated_at DateTime         @default(now()) @db.DateTime(0)
+  users      users            @relation(fields: [user_id], references: [id], onDelete: Cascade, map: "fk_nfc_user")
+
+  @@index([user_id], map: "idx_nfc_cards_user_id")
+  @@index([user_id], map: "idx_nfc_user")
+}
+
+model pao_assignments {
+  id           Int      @id @default(autoincrement()) @db.UnsignedInt
+  user_id      BigInt   @db.UnsignedBigInt
+  bus_id       Int      @db.UnsignedInt
+  service_date DateTime @db.Date
+  created_at   DateTime @default(now()) @db.Timestamp(0)
+  buses        buses    @relation(fields: [bus_id], references: [id], onDelete: Cascade, map: "fk_pao_bus")
+  users        users    @relation(fields: [user_id], references: [id], onDelete: Cascade, map: "fk_pao_user")
+
+  @@unique([service_date, bus_id], map: "uniq_pao_bus_day")
+  @@unique([service_date, user_id], map: "uniq_pao_user_day")
+  @@unique([user_id, service_date], map: "uq_pao_assign_day")
+  @@index([bus_id], map: "fk_pao_bus")
+  @@index([user_id, service_date], map: "idx_pao_assignments_user_date")
+  @@index([service_date], map: "idx_pao_date")
+}
+
+model sensor_readings {
+  id          Int      @id @default(autoincrement()) @db.UnsignedInt
+  timestamp   DateTime @default(now()) @db.DateTime(0)
+  in_count    Int
+  out_count   Int
+  total_count Int
+  bus_id      Int?     @db.UnsignedInt
+  trip_id     Int?     @db.UnsignedInt
+  buses       buses?   @relation(fields: [bus_id], references: [id], map: "fk_sensor_readings_bus")
+  trips       trips?   @relation(fields: [trip_id], references: [id], map: "fk_sr_trip")
+
+  @@index([bus_id, timestamp], map: "idx_sensor_bus_time")
+  @@index([bus_id], map: "idx_sensors_bus")
+  @@index([trip_id], map: "idx_sr_trip")
+}
+
+model ticket_sales {
+  id                                                               Int                          @id @default(autoincrement()) @db.UnsignedInt
+  reference_no                                                     String                       @unique(map: "reference_no") @db.VarChar(16)
+  user_id                                                          BigInt?                      @db.UnsignedBigInt
+  fare_segment_id                                                  Int?                         @db.UnsignedInt
+  price                                                            Decimal                      @db.Decimal(10, 2)
+  passenger_type                                                   ticket_sales_passenger_type  @default(regular)
+  paid                                                             Boolean                      @default(false)
+  payment_method                                                   ticket_sales_payment_method?
+  paid_at                                                          DateTime?                    @db.DateTime(0)
+  ticket_uuid                                                      String                       @unique(map: "ticket_uuid") @db.VarChar(36)
+  created_at                                                       DateTime                     @default(now()) @db.DateTime(0)
+  origin_stop_time_id                                              Int?                         @db.UnsignedInt
+  destination_stop_time_id                                         Int?                         @db.UnsignedInt
+  bus_id                                                           Int
+  issued_by                                                        Int?
+  voided                                                           Boolean                      @default(false)
+  void_reason                                                      String?                      @db.VarChar(120)
+  guest                                                            Boolean                      @default(false)
+  activated_at                                                     DateTime?                    @db.DateTime(0)
+  expires_at                                                       DateTime?                    @db.DateTime(0)
+  is_group                                                         Boolean                      @default(false)
+  group_regular                                                    Int                          @default(0)
+  group_discount                                                   Int                          @default(0)
+  batch_id                                                         BigInt?
+  ticket_stops_ticket_sales_destination_stop_time_idToticket_stops ticket_stops?                @relation("ticket_sales_destination_stop_time_idToticket_stops", fields: [destination_stop_time_id], references: [id], map: "fk_ticket_destination_tstop")
+  ticket_stops_ticket_sales_origin_stop_time_idToticket_stops      ticket_stops?                @relation("ticket_sales_origin_stop_time_idToticket_stops", fields: [origin_stop_time_id], references: [id], map: "fk_ticket_origin_tstop")
+  users                                                            users?                       @relation(fields: [user_id], references: [id], onDelete: Cascade, map: "fk_ticket_user")
+  wallet_ledger                                                    wallet_ledger?
+
+  @@index([fare_segment_id], map: "fk_ticket_fare_segment")
+  @@index([user_id], map: "fk_ticket_user")
+  @@index([destination_stop_time_id], map: "idx_ticket_destination")
+  @@index([origin_stop_time_id], map: "idx_ticket_origin")
+  @@index([payment_method, paid_at], map: "idx_ticket_payment")
+  @@index([batch_id], map: "idx_ticket_sales_batch_id")
+  @@index([issued_by], map: "ix_ticket_sales_issued_by")
+}
+
+model ticket_stops {
+  id                                                               Int            @id @default(autoincrement()) @db.UnsignedInt
+  bus_id                                                           Int            @db.UnsignedInt
+  seq                                                              Int            @db.UnsignedTinyInt
+  stop_name                                                        String         @db.VarChar(128)
+  ticket_sales_ticket_sales_destination_stop_time_idToticket_stops ticket_sales[] @relation("ticket_sales_destination_stop_time_idToticket_stops")
+  ticket_sales_ticket_sales_origin_stop_time_idToticket_stops      ticket_sales[] @relation("ticket_sales_origin_stop_time_idToticket_stops")
+  buses                                                            buses          @relation(fields: [bus_id], references: [id], onUpdate: Restrict, map: "fk_ticket_stops_bus")
+
+  @@index([bus_id, stop_name], map: "idx_ticket_stops_bus_name")
+  @@index([bus_id, seq], map: "idx_ticket_stops_bus_seq")
+}
+
+model trips {
+  id              Int               @id @default(autoincrement()) @db.UnsignedInt
+  service_date    DateTime          @db.Date
+  bus_id          Int?              @db.UnsignedInt
+  number          String            @db.VarChar(80)
+  start_time      DateTime          @db.Time(0)
+  end_time        DateTime          @db.Time(0)
+  sensor_readings sensor_readings[]
+  buses           buses?            @relation(fields: [bus_id], references: [id], map: "fk_trips_bus")
+
+  @@index([bus_id], map: "idx_trips_bus")
+  @@index([service_date], map: "idx_trips_date")
+}
+
+model user_otps {
+  id          BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  user_id     BigInt   @db.UnsignedBigInt
+  channel     String   @db.VarChar(10)
+  destination String   @db.VarChar(254)
+  purpose     String   @db.VarChar(32)
+  code_hash   String   @db.Char(64)
+  expires_at  DateTime @db.DateTime(0)
+  attempts    Int      @default(0) @db.UnsignedInt
+  created_at  DateTime @default(now()) @db.Timestamp(0)
+  users       users    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_user_otps_user")
+
+  @@index([destination], map: "ix_user_otps_destination")
+  @@index([expires_at], map: "ix_user_otps_expires_at")
+  @@index([user_id, purpose], map: "ix_user_otps_user_purpose")
+}
+
+model users {
+  id                   BigInt               @id @default(autoincrement()) @db.UnsignedBigInt
+  first_name           String?              @db.VarChar(80)
+  last_name            String?              @db.VarChar(80)
+  username             String               @unique(map: "username") @db.VarChar(64)
+  phone_number         String?              @unique(map: "phone_number") @db.VarChar(32)
+  password_hash        String               @db.VarChar(256)
+  role                 users_role           @default(commuter)
+  assigned_bus_id      Int?                 @db.UnsignedInt
+  email                String?              @unique(map: "uniq_users_email") @db.VarChar(254)
+  created_at           DateTime             @default(now()) @db.Timestamp(0)
+  updated_at           DateTime             @default(now()) @db.Timestamp(0)
+  email_verified_at    DateTime?            @db.DateTime(0)
+  passenger_type       String               @db.VarChar(20)
+  discount_valid_until DateTime?            @db.Date
+  announcements        announcements[]
+  device_tokens        device_tokens[]
+  driver_assignments   driver_assignments[]
+  nfc_cards            nfc_cards[]
+  pao_assignments      pao_assignments[]
+  ticket_sales         ticket_sales[]
+  user_otps            user_otps[]
+  wallet_accounts      wallet_accounts?
+  wallet_ledger        wallet_ledger[]
+  wallet_topups        wallet_topups[]
+
+  @@index([assigned_bus_id], map: "fk_users_assigned_bus")
+  @@index([role], map: "idx_role")
+}
+
+model wallet_accounts {
+  user_id       BigInt          @id @db.UnsignedBigInt
+  balance_pesos Int
+  created_at    DateTime        @default(now()) @db.DateTime(0)
+  updated_at    DateTime        @default(now()) @db.DateTime(0)
+  qr_token      String?         @unique(map: "uq_wallet_accounts_qr_token") @db.VarChar(255)
+  nfc_uid       String?         @unique(map: "uq_wallet_accounts_nfc_uid") @db.VarChar(64)
+  users         users           @relation(fields: [user_id], references: [id], onDelete: Cascade, map: "fk_wallet_user")
+  wallet_ledger wallet_ledger[]
+  wallet_topups wallet_topups[]
+}
+
+model wallet_ledger {
+  id                    Int                           @id @default(autoincrement()) @db.UnsignedInt
+  account_id            BigInt                        @db.UnsignedBigInt
+  amount_pesos          Int
+  type                  wallet_ledger_type
+  payment_method        wallet_ledger_payment_method?
+  ticket_sale_id        Int?                          @unique(map: "uq_wallet_ledger_ticket") @db.UnsignedInt
+  pao_id                BigInt?                       @db.UnsignedBigInt
+  bus_id                Int?                          @db.UnsignedInt
+  description           String?                       @db.VarChar(255)
+  balance_after_cents   BigInt
+  provider_ref          String?                       @db.VarChar(64)
+  metadata              String?                       @db.LongText
+  created_at            DateTime                      @default(now()) @db.DateTime(0)
+  direction             wallet_ledger_direction?
+  event                 String?                       @db.VarChar(64)
+  running_balance_pesos Int
+  ref_table             String?                       @db.VarChar(64)
+  ref_id                Int?
+  wallet_accounts       wallet_accounts               @relation(fields: [account_id], references: [user_id], map: "fk_wallet_ledger_account_wallet_accounts")
+  buses                 buses?                        @relation(fields: [bus_id], references: [id], map: "fk_wallet_ledger_bus")
+  users                 users?                        @relation(fields: [pao_id], references: [id], map: "fk_wallet_ledger_pao")
+  ticket_sales          ticket_sales?                 @relation(fields: [ticket_sale_id], references: [id], map: "fk_wallet_ledger_ticket")
+
+  @@index([account_id], map: "idx_wallet_ledger_account_id")
+  @@index([bus_id], map: "idx_wallet_ledger_bus")
+  @@index([pao_id], map: "idx_wallet_ledger_pao")
+  @@index([ticket_sale_id], map: "idx_wallet_ledger_ticket")
+  @@index([account_id], map: "ix_wallet_ledger_account_id")
+  @@index([created_at], map: "ix_wallet_ledger_created_at")
+}
+
+model wallet_topups {
+  id              Int                    @id @default(autoincrement()) @db.UnsignedInt
+  account_id      BigInt                 @db.UnsignedBigInt
+  method          wallet_topups_method   @default(gcash)
+  amount_pesos    Int
+  provider        wallet_topups_provider
+  provider_ref    String                 @db.VarChar(64)
+  status          wallet_topups_status   @default(succeeded)
+  created_at      DateTime               @default(now()) @db.DateTime(0)
+  updated_at      DateTime               @default(now()) @db.DateTime(0)
+  pao_id          BigInt?                @db.UnsignedBigInt
+  wallet_accounts wallet_accounts        @relation(fields: [account_id], references: [user_id], onDelete: NoAction, map: "fk_wallet_topups_account_to_wallet_accounts_user_id")
+  users           users?                 @relation(fields: [pao_id], references: [id], map: "fk_wallet_topups_pao_to_users_id")
+
+  @@unique([provider, provider_ref], map: "uq_topup_provider_ref")
+  @@index([account_id, status, created_at], map: "idx_topups_account_status_created")
+  @@index([account_id], map: "ix_wallet_topups_account_id")
+  @@index([created_at], map: "ix_wallet_topups_created_at")
+  @@index([pao_id], map: "ix_wallet_topups_pao_id")
+  @@index([status], map: "ix_wallet_topups_status")
+}
+
+enum wallet_topups_method {
+  cash
+  gcash
+  maya
+}
+
+enum wallet_ledger_type {
+  topup
+  debit
+  reversal
+  adjustment
+}
+
+enum wallet_topups_provider {
+  gcash
+  maya
+  cashdesk
+  other
+}
+
+enum nfc_cards_status {
+  active
+  blocked
+}
+
+enum wallet_ledger_payment_method {
+  cash
+  gcash
+  wallet
+  adjustment
+  other
+}
+
+enum ticket_sales_passenger_type {
+  regular
+  discount
+}
+
+enum wallet_topups_status {
+  pending
+  succeeded
+  failed
+  cancelled
+}
+
+enum users_role {
+  commuter
+  pao
+  manager
+  teller
+  driver
+}
+
+enum ticket_sales_payment_method {
+  cash
+  gcash
+  wallet
+}
+
+enum wallet_ledger_direction {
+  credit
+  debit
+}
